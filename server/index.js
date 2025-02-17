@@ -7,10 +7,13 @@
 
 import express from 'express';
 import http from 'http';
-import WebSocket from 'ws';
+import { WebSocketServer } from 'ws';
 import cors from 'cors';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
+import { readFileSync } from 'fs';
 dotenv.config();
 
 
@@ -23,35 +26,86 @@ app.use(express.json()); // get the data and convert data into json
 // Create HTTP server
 const server = http.createServer(app);
 
-// Create WebSocket server. 
-const wss = new WebSocket.Server({ server });
+// Create WebSocket server
+const wss = new WebSocketServer({ server });
 
 // Initialize OpenAI client
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
+// Initialize Google Sheets Authentication
+const credentials = JSON.parse(readFileSync('./config/google-credentials.json'));
+const serviceAccountAuth = new JWT({
+    email: credentials.client_email,
+    key: credentials.private_key,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+});
+
+async function getSheetData(spreadsheetId) {
+    const doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
+    await doc.loadInfo();
+    
+    const sheetData = {};
+    for (let i = 0; i < doc.sheetCount; i++) {
+        const sheet = doc.sheetsByIndex[i];
+        await sheet.loadCells();
+        const rows = await sheet.getRows();
+        sheetData[sheet.title] = {
+            title: sheet.title,
+            headers: rows[0] ? Object.keys(rows[0]).filter(key => !key.startsWith('_')) : [],
+            rows: rows.map(row => {
+                const rowData = {};
+                Object.keys(row).filter(key => !key.startsWith('_')).forEach(key => {
+                    rowData[key] = row[key];
+                });
+                return rowData;
+            })
+        };
+    }
+    return sheetData;
+}
+
 // WebSocket connection handler
 wss.on('connection', (ws) => {
-
-    //  if client connected
     console.log('New client connected');
 
-    //  if client send a message
     ws.on('message', async (data) => {
         try {
-            const message = JSON.parse(data); // convert data into json
+            const message = JSON.parse(data);
             
-            // Call OpenAI API
+            // If spreadsheet ID is provided, fetch the data
+            let sheetData = {};
+            if (message.spreadsheetId) {
+                sheetData = await getSheetData(message.spreadsheetId);
+            }
+
+            // Prepare context for GPT
+            const context = `You are an AI analyst specialized in analyzing spreadsheet data and providing insights. 
+            You have access to the following spreadsheet data: ${JSON.stringify(sheetData, null, 2)}
+            
+            Please analyze this data and provide insights based on the user's question. 
+            Consider:
+            1. Trends and patterns in the data
+            2. Key metrics and their relationships
+            3. Potential forecasts based on historical data
+            4. Any anomalies or interesting findings
+            
+            Format your response in a clear, structured way with sections for:
+            - Summary of findings
+            - Detailed analysis
+            - Recommendations (if applicable)
+            - Data limitations or caveats`;
+
+            // Call OpenAI API with enhanced context
             const response = await openai.chat.completions.create({
-                model: "gpt-3.5-turbo",  // model to use
+                model: "gpt-3.5-turbo",
                 messages: [
-                    { role: "system", content: "You are a helpful assistant." }, 
-                    // system message this define the behavior of the assistant
-                    { role: "user", content: message.content } // user message
+                    { role: "system", content: context },
+                    { role: "user", content: message.content }
                 ],
-                temperature: 0.7, // not sure about these two parameters
-                max_tokens: 1000 
+                temperature: 0.7,
+                max_tokens: 2000
             });
 
             // Send response back to client
@@ -63,15 +117,19 @@ wss.on('connection', (ws) => {
             console.error('Error:', error);
             ws.send(JSON.stringify({
                 role: 'assistant',
-                content: 'Sorry, there was an error processing your request.'
+                content: 'Sorry, there was an error processing your request: ' + error.message
             }));
         }
     });
 
-    //  if connectioned got closed
     ws.on('close', () => {
         console.log('Client disconnected');
     });
+});
+
+// Basic health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
 });
 
 // Start the backend server
