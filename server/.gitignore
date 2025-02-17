@@ -1,2 +1,12 @@
+# dependencies
+/node_modules
+
+# environment variables
 .env
-node_modules
+
+# Google credentials
+/config/google-credentials.json
+
+# misc
+.DS_Store
+*.pem

@@ -38,7 +38,14 @@ npm install
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-4. Run the server:
+4. Set up Google Sheets credentials:
+- Create a `config` directory in the server folder
+- Copy `google-credentials.example.json` to `google-credentials.json`
+- Replace the placeholder values with your actual Google Service Account credentials
+- Make sure NOT to commit `google-credentials.json` to version control
+- Share your Google Sheets with the service account email address for access
+
+5. Run the server:
 ```bash
 # For development with auto-reload:
 npm run dev
@@ -49,12 +56,20 @@ npm start
 
 ## Usage
 1. Open your browser and navigate to `http://localhost:5173`
-2. Start chatting with the AI assistant
-3. The chat interface will display your messages and the AI's responses in real-time
+2. Enter your Google Sheet ID (found in the sheet's URL between /d/ and /edit)
+3. Start asking questions about your spreadsheet data
+4. Get AI-powered insights and analysis
 
 ## Features
 - Real-time chat interface
 - WebSocket communication
 - Integration with GPT-3.5
+- Google Sheets data analysis
 - Responsive design
-- Loading states and error handling 
+- Loading states and error handling
+
+## Security Notes
+- Never commit sensitive credentials to version control
+- Keep your `.env` and `google-credentials.json` files secure
+- Use environment variables for sensitive information
+- Regularly rotate API keys and credentials 
