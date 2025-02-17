@@ -35,7 +35,7 @@ const openai = new OpenAI({
 });
 
 // Initialize Google Sheets Authentication
-const credentials = JSON.parse(readFileSync('./config/google-credentials.json'));
+const credentials = JSON.parse(readFileSync('./google-credentials.json'));
 const serviceAccountAuth = new JWT({
     email: credentials.client_email,
     key: credentials.private_key,
